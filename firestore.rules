@@ -1,0 +1,27 @@
+rules_version = '2';
+// Reglas de la primera versión: cualquier visitante de la app (sesión anónima) puede usarla;
+// los permisos por rol (admin, encargado, cliente) los aplica la app.
+// Siguiente paso de seguridad: validar el PIN en el servidor (Cloud Functions) y usar roles en las reglas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+
+    match /config/{id} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+    match /clientes/{tel} {
+      allow read, write: if signedIn() && tel.matches('^[0-9]{10}$');
+    }
+    match /pedidos/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.estado == 'recibido'
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && exists(/databases/$(database)/documents/clientes/$(request.resource.data.clienteTel));
+      allow update: if signedIn();
+      allow delete: if false;
+    }
+  }
+}
